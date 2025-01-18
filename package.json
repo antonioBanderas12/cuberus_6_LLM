@@ -1,0 +1,26 @@
+{
+  "name": "i1",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "vite": "^6.0.1"
+  },
+  "dependencies": {
+    "@azure-rest/ai-inference": "^1.0.0-beta.4",
+    "@azure/core-auth": "^1.9.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "gsap": "^3.12.5",
+    "openai": "^4.79.1",
+    "pdfjs-dist": "^4.10.38",
+    "three": "^0.170.0",
+    "three-rounded-box": "^0.1.1"
+  }
+}
