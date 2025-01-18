@@ -13,6 +13,79 @@ import 'pdfjs-dist/build/pdf.worker.min.mjs';
 
 
 
+//resizer and pdf showcasing for reading
+
+
+const resizer = document.getElementById('resizer');
+const leftPanel = document.getElementById('pdf-container');
+const rightPanel = document.getElementById('threejs-container');
+
+let isResizing = false;
+
+resizer.addEventListener('mousedown', (event) => {
+  isResizing = true;
+  document.addEventListener('mousemove', resize);
+  document.addEventListener('mouseup', stopResize);
+});
+
+function resize(event) {
+  if (isResizing) {
+    let newWidth = event.clientX / window.innerWidth * 100;
+    leftPanel.style.width = `${newWidth}%`;
+    rightPanel.style.width = `${100 - newWidth}%`;
+  }
+}
+
+function stopResize() {
+  isResizing = false;
+  document.removeEventListener('mousemove', resize);
+  document.removeEventListener('mouseup', stopResize);
+}
+
+
+
+document.getElementById('pdfFile').addEventListener('change', function (event) {
+  const file = event.target.files[0];
+  if (file) {
+      const fileReader = new FileReader();
+      fileReader.onload = function () {
+          const typedArray = new Uint8Array(this.result);
+          pdfjsLib.getDocument(typedArray).promise.then(function (pdf) {
+              renderPDF(pdf);
+          });
+      };
+      fileReader.readAsArrayBuffer(file);
+  }
+});
+
+function renderPDF(pdf) {
+  const container = document.getElementById('pdf-container');
+  container.innerHTML = ''; // Clear previous pages
+
+  for (let i = 1; i <= pdf.numPages; i++) {
+      pdf.getPage(i).then(function (page) {
+          const canvas = document.createElement('canvas');
+          const context = canvas.getContext('2d');
+          container.appendChild(canvas);
+
+          const viewport = page.getViewport({ scale: 1.5 });
+          canvas.width = viewport.width;
+          canvas.height = viewport.height;
+
+          const renderContext = {
+              canvasContext: context,
+              viewport: viewport,
+          };
+          page.render(renderContext);
+      });
+  }
+}
+
+
+
+
+
+
 // LLM
 // LLM
 // LLM
@@ -121,7 +194,9 @@ function initializeThreeJS(boxDataList){  // Pass the actual data
   const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
   renderer.setSize(window.innerWidth - 18, window.innerHeight - 18);
   renderer.setPixelRatio(window.devicePixelRatio);
-  document.body.appendChild(renderer.domElement);
+  //document.body.appendChild(renderer.domElement);
+
+  document.getElementById('threejs-container').appendChild(renderer.domElement);
 
   //light
   const ambientLight = new THREE.AmbientLight(0xffffff, 2); // Higher intensity for brighter illumination
@@ -611,7 +686,10 @@ function manNavigation() {
   let isDragging = false;
   let prevMousePosition = { x: 0, y: 0 };
   
-  const canvas = document.querySelector('canvas'); 
+  // const canvas = document.querySelector('canvas');
+  
+  
+  const canvas = document.querySelector('#threejs-container canvas'); // Target the canvas inside the threejs-container
   
   canvas.addEventListener('wheel', (event) => {
     if (mode === structure && !explore) {
@@ -1591,6 +1669,16 @@ function updateBoundingBoxes() {
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
   });
+
+
+
+
+  // window.addEventListener('resize', function() {
+  //   renderer.setSize(window.innerWidth - 18, window.innerHeight - 18);
+  //   camera.aspect = window.innerWidth / window.innerHeight;
+  //   camera.updateProjectionMatrix();
+  // });
+  
 
   function animate() {
     requestAnimationFrame(animate);
