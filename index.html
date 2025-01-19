@@ -9,84 +9,32 @@
   <body>
     <div id="app"></div>
 
-    <!-- rolling the dice -->
-    <!-- <div id="roll-buttons-container" style="position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 10; display: flex; gap: 30px;">
-      <button id="structure" class="roll">hierarchies</button>
-      <button id="relations" class="roll">dynamics</button>
-      <button id="themes" class="roll">themes</button>
-    </div>     -->
+      <div id="container">
+        <div id="pdf-container">
+          <div id="pdf-buttons">
+            <label for="pdfFile" class="custom-file-upload">upload_pdf</label>
+            <input type="file" id="pdfFile" accept="application/pdf">
+            <button id="summary" onclick="fetchSummary()">summarize</button>
+          </div>
+        </div>
+        
+        <div id="resizer"></div>
+        
+        <div id="threejs-container">
+            <!-- rolling the dice -->
+            <div id="roll-buttons-container">
+              <button id="structure" class="roll">hierarchies</button>
+              <button id="relations" class="roll">dynamics</button>
+              <button id="themes" class="roll">themes</button>
+            </div>    
 
-    <!-- description container -->
-    <!-- <div id="description-container" style="
-      position: fixed;
-      bottom: 0;
-      left: 0;
-      width: 100%;
-      padding: 10px;
-      background: rgba(0, 0, 0, 0.7);
-      color: white;
-      font-family: 'Courier Prime', monospace;
-      text-align: center;
-      display: none; /* Initially hidden */
-      "></div> -->
-
-
-<input type="file" id="pdfFile" accept="application/pdf">
-<button id="summary" onclick="fetchSummary()">Summarize PDF</button>
-
-
-
-
-                <div id="container">
-                  <div id="pdf-container">
-                    <!-- <input type="file" id="pdfFile" accept="application/pdf">
-                    <button id="summary" onclick="fetchSummary()">Summarize PDF</button> -->
-                    <!-- <div id="summaryResult"></div> -->
-                  </div>
-                  
-                  <div id="resizer"></div>
-                  
-                  <div id="threejs-container">
-
-
-                      <!-- rolling the dice -->
-                      <div id="roll-buttons-container" style="position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 10; display: flex; gap: 30px;">
-                        <button id="structure" class="roll">hierarchies</button>
-                        <button id="relations" class="roll">dynamics</button>
-                        <button id="themes" class="roll">themes</button>
-                      </div>    
-
-                      <!-- description container -->
-                      <div id="description-container" style="
-                        position: fixed;
-                        bottom: 0;
-                        left: 0;
-                        width: 100%;
-                        padding: 10px;
-                        background: rgba(0, 0, 0, 0.7);
-                        color: white;
-                        font-family: 'Courier Prime', monospace;
-                        text-align: center;
-                        display: none; /* Initially hidden */
-                        "></div>
-
-
-
-
-
-
-                  </div>
-                </div>
-
-
+            <!-- description container -->
+            <div id="description-container"></div>
+        </div>
+      </div>
 
     <!-- clicked object info -->
     <!-- <div id="clicked-cube-info" style="position: fixed; top: 60px; right: 20px; z-index: 10;" class = "current"> None </div> -->
-
-    <!-- pdf input -->
-    <!-- <input type="file" id="pdfFile" accept="application/pdf"> -->
-    
-    <!-- <div id="summaryResult"></div> -->
     
     <script type="module" src="/src/main.js"></script>
   </body>

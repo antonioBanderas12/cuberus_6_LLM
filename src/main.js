@@ -28,6 +28,17 @@ resizer.addEventListener('mousedown', (event) => {
   document.addEventListener('mouseup', stopResize);
 });
 
+
+window.addEventListener('resize', () => {
+  // On window resize, adjust the panels' width if needed
+  const containerWidth = document.getElementById('container').offsetWidth;
+  const leftPanelWidth = leftPanel.offsetWidth;
+  leftPanel.style.width = `${(leftPanelWidth / containerWidth) * 100}%`;
+  rightPanel.style.width = `${100 - (leftPanelWidth / containerWidth) * 100}%`;
+});
+
+
+
 function resize(event) {
   if (isResizing) {
     let newWidth = event.clientX / window.innerWidth * 100;
@@ -43,46 +54,71 @@ function stopResize() {
 }
 
 
+let currentScale = 1.5; // Default zoom level
+let currentPDF = null; // Store the loaded PDF
 
 document.getElementById('pdfFile').addEventListener('change', function (event) {
-  const file = event.target.files[0];
-  if (file) {
-      const fileReader = new FileReader();
-      fileReader.onload = function () {
-          const typedArray = new Uint8Array(this.result);
-          pdfjsLib.getDocument(typedArray).promise.then(function (pdf) {
-              renderPDF(pdf);
-          });
-      };
-      fileReader.readAsArrayBuffer(file);
-  }
+    const file = event.target.files[0];
+    if (file) {
+        const fileReader = new FileReader();
+        fileReader.onload = function () {
+            const typedArray = new Uint8Array(this.result);
+            pdfjsLib.getDocument(typedArray).promise.then(function (pdf) {
+                currentPDF = pdf;
+                renderPDF();
+            });
+        };
+        fileReader.readAsArrayBuffer(file);
+    }
 });
 
-function renderPDF(pdf) {
-  const container = document.getElementById('pdf-container');
-  container.innerHTML = ''; // Clear previous pages
+function renderPDF() {
+    if (!currentPDF) return;
 
-  for (let i = 1; i <= pdf.numPages; i++) {
-      pdf.getPage(i).then(function (page) {
-          const canvas = document.createElement('canvas');
-          const context = canvas.getContext('2d');
-          container.appendChild(canvas);
+    const container = document.getElementById('pdf-container');
+    const buttonsContainer = document.getElementById('pdf-buttons');
 
-          const viewport = page.getViewport({ scale: 1.5 });
-          canvas.width = viewport.width;
-          canvas.height = viewport.height;
+    container.innerHTML = ''; // Clear previous content
+    container.appendChild(buttonsContainer); // Re-add buttons
 
-          const renderContext = {
-              canvasContext: context,
-              viewport: viewport,
-          };
-          page.render(renderContext);
-      });
-  }
+    for (let i = 1; i <= currentPDF.numPages; i++) {
+        currentPDF.getPage(i).then(function (page) {
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+            container.appendChild(canvas);
+
+            const viewport = page.getViewport({ scale: currentScale });
+            canvas.width = viewport.width;
+            canvas.height = viewport.height;
+
+            const renderContext = {
+                canvasContext: context,
+                viewport: viewport,
+            };
+            page.render(renderContext);
+        });
+    }
 }
 
+// Handle zooming (CMD + Scroll or Two-Finger Touchpad Gesture)
+document.getElementById('pdf-container').addEventListener('wheel', function (event) {
+    // Only zoom when the CMD key is pressed or when it's a touchpad gesture
+    if (event.ctrlKey || event.metaKey) {
+        event.preventDefault(); // Prevent scrolling behavior
 
+        if (event.deltaY < 0) {
+            // Scroll Up (Zoom In)
+            currentScale += 0.05;
+        } else if (event.deltaY > 0) {
+            // Scroll Down (Zoom Out)
+            if (currentScale > 0.5) { // Prevent zooming out too much
+                currentScale -= 0.05;
+            }
+        }
 
+        renderPDF(); // Re-render PDF with updated scale
+    }
+});
 
 
 
@@ -196,7 +232,10 @@ function initializeThreeJS(boxDataList){  // Pass the actual data
   renderer.setPixelRatio(window.devicePixelRatio);
   //document.body.appendChild(renderer.domElement);
 
+  //add buttons again
   document.getElementById('threejs-container').appendChild(renderer.domElement);
+  const rollButtonsContainer = document.getElementById('roll-buttons-container');
+  document.getElementById('threejs-container').appendChild(rollButtonsContainer);
 
   //light
   const ambientLight = new THREE.AmbientLight(0xffffff, 2); // Higher intensity for brighter illumination
@@ -1663,21 +1702,13 @@ function updateBoundingBoxes() {
 }
 
 
-  // Animation loop
-  window.addEventListener('resize', function () {
+
+
+  window.addEventListener('resize', function() {
+    renderer.setSize(window.innerWidth - 18, window.innerHeight - 18);
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
   });
-
-
-
-
-  // window.addEventListener('resize', function() {
-  //   renderer.setSize(window.innerWidth - 18, window.innerHeight - 18);
-  //   camera.aspect = window.innerWidth / window.innerHeight;
-  //   camera.updateProjectionMatrix();
-  // });
   
 
   function animate() {
@@ -1781,6 +1812,15 @@ document.getElementById("summary").addEventListener("click", async function () {
     console.error("Error summarizing PDF:", error);
   }
 });
+
+
+
+  // Animation loop
+  // window.addEventListener('resize', function () {
+  //   camera.aspect = window.innerWidth / window.innerHeight;
+  //   camera.updateProjectionMatrix();
+  //   renderer.setSize(window.innerWidth, window.innerHeight);
+  // });
 
 
 
