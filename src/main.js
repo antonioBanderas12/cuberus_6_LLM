@@ -137,7 +137,7 @@ function renderPDF() {
                 canvasContext: context,
                 viewport: viewport,
             };
-            
+
             //page.render(renderContext);
 
 
@@ -422,7 +422,7 @@ function enhanceBox(name, parentes = [], relations = [[]]) {
     // Create text geometry
     const textGeometry = new TextGeometry(cube.userData.name, {
       font: font,
-      size: boxSize / 2,
+      size: boxSize,
       height: 0.2,
       curveSegments: 12,
     });
@@ -470,15 +470,15 @@ function enhanceBox(name, parentes = [], relations = [[]]) {
 
 
 //z-level
-  let zLevel = 0;
-  if (parentReferences && parentReferences.length > 0) {
-      // Find the maximum level among all parents
-      const maxParentLevel = Math.max(
-          ...parentReferences.map(parent => (parent?.userData?.level ?? 0))
-      );
-      zLevel = maxParentLevel + 25;
-  }
-  cube.userData.level = zLevel;
+  // let zLevel = 0;
+  // if (parentReferences && parentReferences.length > 0) {
+  //     // Find the maximum level among all parents
+  //     const maxParentLevel = Math.max(
+  //         ...parentReferences.map(parent => (parent?.userData?.level ?? 0))
+  //     );
+  //     zLevel = maxParentLevel + 25;
+  // }
+  // cube.userData.level = zLevel;
 
 
 
@@ -520,28 +520,48 @@ function enhanceBox(name, parentes = [], relations = [[]]) {
 
 
 
-function updateZLevels() {
-  // Create a map of boxes by their names for easy lookup
-  const boxMap = new Map(boxes.map(box => [box.userData.name, box]));
+// function updateZLevels() {
+//   // Create a map of boxes by their names for easy lookup
+//   const boxMap = new Map(boxes.map(box => [box.userData.name, box]));
 
-  // Function to recursively update z-levels
+//   // Function to recursively update z-levels
   
-  function updateLevel(box, level) {
-    box.userData.level = level;
-    box.position.z = level;
+//   function updateLevel(box, level) {
+//     box.userData.level = level;
+//     box.position.z = level;
     
-    // Update children
-    (box.userData.children || []).forEach(childName => {
-      const childBox = boxMap.get(childName);
-      if (childBox) {
-        updateLevel(childBox, level + 25);
-      }
-    });
+//     // Update children
+//     (box.userData.children || []).forEach(childName => {
+//       const childBox = boxMap.get(childName);
+//       if (childBox) {
+//         updateLevel(childBox, level + 25);
+//       }
+//     });
+//   }
+
+//   // Start updating from root boxes (boxes without parents)
+//   boxes.filter(box => box.userData.parents.length === 0).forEach(rootBox => {
+//     updateLevel(rootBox, 0);
+//   });
+// }
+
+
+
+
+function updateZLevels() {
+  function updateLevel(box, level) {
+      box.userData.level = level;
+      box.position.z = level;
+      
+      // Ensure children are correctly referenced as objects
+      (box.userData.children || []).forEach(childBox => {
+          updateLevel(childBox, level + 25);
+      });
   }
 
   // Start updating from root boxes (boxes without parents)
   boxes.filter(box => box.userData.parents.length === 0).forEach(rootBox => {
-    updateLevel(rootBox, 0);
+      updateLevel(rootBox, 0);
   });
 }
 
@@ -641,11 +661,6 @@ function onHover(cube) {
    });
 
    const textContainer = document.getElementById('description-container');
-  //  if (textContainer) {
-  //   //textContainer.innerText = cube.userData.name + ': ' + cube.userData.description; // Set the text content
-
-  //    textContainer.style.display = 'block'; // Ensure it's visible
-  //  }
 
    if (textContainer) {
     textContainer.innerHTML = `<span style="color: ${cube.userData.colour}">${cube.userData.name}</span>: ${cube.userData.description}`;
@@ -731,6 +746,10 @@ function onHover(cube) {
     scene.add(statusOutline);
     cube.userData.statusline = statusOutline;
   
+
+
+
+
     const textContainer = document.getElementById('description-container');
   
     if (textContainer) {
@@ -1158,17 +1177,25 @@ function createOutline(cube, color = 0xF7E0C0) {
     // Create a circle geometry (we'll scale it to make an oval)
     const circleGeometry = new THREE.CircleGeometry(1, 64);
 
+    const boxgeometry = new THREE.BoxGeometry(size.x *1.3, size.y * 1.3, size.z * 1.3);
+
     // Create outline material
-    const outlineMaterial = new THREE.MeshBasicMaterial({
+    const outlineMaterial = new THREE.MeshStandardMaterial({
       color,
       transparent: false,
-      opacity: 1,
+      opacity: 0.5,
+      depthWrite: false, // Ensures it doesn't block objects behind it
       side: THREE.DoubleSide // Make sure the outline is visible from both sides
     });
 
     // Create mesh and scale it to form an oval
-    const outlineMesh = new THREE.Mesh(circleGeometry, outlineMaterial);
-    outlineMesh.scale.set(factorX / 1.7, factorY / 0.7, 1);
+    //const outlineMesh = new THREE.Mesh(circleGeometry, outlineMaterial);
+    
+
+    const outlineMesh = new THREE.Mesh(boxgeometry, outlineMaterial);
+
+
+    //outlineMesh.scale.set(factorX / 1.7, factorY / 0.7, 1);
     outlineMesh.position.copy(cube.position);
     scene.add(outlineMesh);
 
@@ -1185,6 +1212,35 @@ function createOutline(cube, color = 0xF7E0C0) {
     }
   }
 }
+
+
+
+
+// function createOutline(cube, color = 0xF7E0C0) {
+//   if (cube && !cube.userData.outline) {
+//     const box = new THREE.Box3().setFromObject(cube);
+
+//     // Get the dimensions of the bounding box
+//     const size = new THREE.Vector3();
+//     box.getSize(size);
+
+//     // Create edges geometry for outline instead of a solid box
+//     const outlineGeometry = new THREE.EdgesGeometry(new THREE.BoxGeometry(size.x * 1.3, size.y * 1.3, size.z * 1.3));
+//     const outlineMaterial = new THREE.LineBasicMaterial({ color });
+
+//     const outlineMesh = new THREE.LineSegments(outlineGeometry, outlineMaterial);
+
+//     // Position it correctly
+//     outlineMesh.position.copy(cube.position);
+
+//     // Save the outline for later removal
+//     cube.userData.outline = outlineMesh;
+
+//     scene.add(outlineMesh);
+//   }
+// }
+
+
 
 
 
@@ -1826,6 +1882,55 @@ function prepareBoxData(name, description, status, parents = [], relations = [])
 }
 
 // Function to process all boxes
+// function processAllBoxes(boxesData) {
+//   const createdBoxes = new Map();
+
+//   // Phase 1: Create all boxes
+//   boxesData.forEach(data => {
+//       const box = createBox(data.name, data.description, data.status);
+//       createdBoxes.set(data.name, box);
+//   });
+
+//   // Phase 2: Enhance all boxes
+//   boxesData.forEach(data => {
+//       const box = createdBoxes.get(data.name);
+      
+//           data.parents.forEach(parentName => {
+//             if(!createdBoxes.has(parentName)){
+//               boxesData.push(prepareBoxData(parentName,null, null, null,null));
+//               let createdNew = createBox(parentName,"superordinate element","superordinate element");
+//               createdBoxes.set(parentName, createdNew);
+//               enhanceBox(createdNew, [], []);
+//               //enhanceBox(parentName, [], []);
+//             }
+//           })
+
+//           data.relations.forEach(([relation, description]) => {
+//             if(!createdBoxes.has(relation)){
+//               boxesData.push(prepareBoxData(relation,null, null, null,null));
+//               let createdNew = createBox(relation,"related element","related element");
+//               createdBoxes.set(relation, createdNew);
+//               enhanceBox(createdNew, [], []);
+//               //enhanceBox(relation, [], []);
+//             }
+//           })
+
+//       const parentBoxes = data.parents.map(parentName => createdBoxes.get(parentName)).filter(Boolean);
+//       const processedRelations = data.relations.map(([relatedName, description]) => 
+//           [createdBoxes.get(relatedName), description]).filter(([box]) => box);
+      
+//       enhanceBox(box, parentBoxes, processedRelations);
+//   });
+
+//   // Update z-levels after all enhancements
+//   updateZLevels();
+
+//   return Array.from(createdBoxes.values());
+// }
+
+
+
+
 function processAllBoxes(boxesData) {
   const createdBoxes = new Map();
 
@@ -1835,42 +1940,38 @@ function processAllBoxes(boxesData) {
       createdBoxes.set(data.name, box);
   });
 
-  // Phase 2: Enhance all boxes
+  // Phase 2: Create missing parents first
+  boxesData.forEach(data => {
+      data.parents.forEach(parentName => {
+          if (!createdBoxes.has(parentName)) {
+              // Add missing parent box before processing children
+              boxesData.push(prepareBoxData(parentName, null, null, null, null));
+              let createdNew = createBox(parentName, "superordinate element", "superordinate element");
+              createdBoxes.set(parentName, createdNew);
+              enhanceBox(createdNew, [], []); // Parents should be enhanced first
+          }
+      });
+  });
+
+  // Phase 3: Enhance all boxes after ensuring parents exist
   boxesData.forEach(data => {
       const box = createdBoxes.get(data.name);
-      
-          data.parents.forEach(parentName => {
-            if(!createdBoxes.has(parentName)){
-              boxesData.push(prepareBoxData(parentName,null, null, null,null));
-              let createdNew = createBox(parentName,"superordinate element","superordinate element");
-              createdBoxes.set(parentName, createdNew);
-              enhanceBox(createdNew, [], []);
-              //enhanceBox(parentName, [], []);
-            }
-          })
-
-          data.relations.forEach(([relation, description]) => {
-            if(!createdBoxes.has(relation)){
-              boxesData.push(prepareBoxData(relation,null, null, null,null));
-              let createdNew = createBox(relation,"related element","related element");
-              createdBoxes.set(relation, createdNew);
-              enhanceBox(createdNew, [], []);
-              //enhanceBox(relation, [], []);
-            }
-          })
 
       const parentBoxes = data.parents.map(parentName => createdBoxes.get(parentName)).filter(Boolean);
       const processedRelations = data.relations.map(([relatedName, description]) => 
           [createdBoxes.get(relatedName), description]).filter(([box]) => box);
-      
+
       enhanceBox(box, parentBoxes, processedRelations);
   });
 
-  // Update z-levels after all enhancements
+  // Step 4: **Now update levels after all boxes exist**
   updateZLevels();
 
   return Array.from(createdBoxes.values());
 }
+
+
+
 
 
 //populate

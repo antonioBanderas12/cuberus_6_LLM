@@ -17,7 +17,7 @@ app.use(express.json());
 
 // Prompt function
 const prompt = (text) => {
-  return `This is the text: ${text}. I want a summary of the text as an arraylist back in the following form. Do not write any additional text, just give me the arraylist: I want you to extend and enhance this list with contents from the article. Here are the descriptions of the attributes: [entity name; entity description; status or group; references to one or more other entities created that resemble superordinate concepts or entities like a parent-child relationship or a whole-part relationship,where always the bigger or superordinate is represented; a list of tuples that consist of one reference to another created entity and a matching description where dynamics and relationships that are not hierarchical should be described for example the way one entity changes another one ]. Here is an example so you have an idea, how the form could look like:
+  return `This is the text: ${text}. I want a summary of the text as an arraylist back in the following form. Do not write any additional text, just give me the arraylist: I want you to extend and enhance this list with contents from the article. Here are the descriptions of the attributes: [entity name; entity description; status or group; references to one or more other entities created that resemble superordinate concepts or entities like a parent-child relationship or a whole-part relationship,where always the bigger or superordinate is represented; a list of tuples that consist of one reference to another created entity and a matching description where dynamics and relationships that are not hierarchical should be described for example the way one entity changes another one ]. Try to be detailled and create rather more than less entries. Here is an example so you have an idea, how the form could look like:
   "[
       {
           "name": "car",
@@ -42,6 +42,36 @@ const prompt = (text) => {
               ["electric_motor", "Alternative energy converter in electric vehicles"],
               ["fuel_system", "Delivers fuel to power the engine"]
           ]
+      },
+            {
+          "name": "vehicle_body",
+          "description": "The outer shape and structure of a car.",
+          "status": "vehicle component",
+          "parents": ["car"],
+          "relations": [
+              ["status_and_style", "A car is seen by many as a status symbol because of its shape"],
+              ["fuel_consumption", "The shape of a car influences its fuel consumption"]
+            ]
+      },
+            {
+          "name": "social_implications",
+          "description": "The social importsance a car has",
+          "status": "social",
+          "parents": ["car", "transportation"],
+          "relations": [
+              ["car", "A car is seen by many as a status symbol because of its shape"],
+              ["fuel_consumption", "The shape of a car influences its fuel consumption"]
+            ]
+      },
+                  {
+          "name": "status_and_style",
+          "description": "statussymbols form a style",
+          "status": "social",
+          "parents": ["social_implications"],
+          "relations": [
+              ["car", "A car is seen by many as a status symbol because of its shape"],
+              ["fuel_consumption", "The shape of a car influences its fuel consumption"]
+            ]
       },
       {
           "name": "internal_combustion_engine",
@@ -105,3 +135,7 @@ app.post('/summarize', async (req, res) => {
 app.listen(port, () => {
   console.log(`Server running at http://localhost:${port}`);
 });
+
+
+
+
