@@ -13,13 +13,11 @@ import 'pdfjs-dist/build/pdf.worker.min.mjs';
 
 
 
-//resizer and pdf showcasing for reading
-
-
+//resizing
 const resizer = document.getElementById('resizer');
 const leftPanel = document.getElementById('pdf-container');
 const rightPanel = document.getElementById('threejs-container');
-
+let camera, renderer, originalAspectRatio;
 let isResizing = false;
 
 resizer.addEventListener('mousedown', (event) => {
@@ -28,22 +26,33 @@ resizer.addEventListener('mousedown', (event) => {
   document.addEventListener('mouseup', stopResize);
 });
 
-
-window.addEventListener('resize', () => {
-  // On window resize, adjust the panels' width if needed
-  const containerWidth = document.getElementById('container').offsetWidth;
-  const leftPanelWidth = leftPanel.offsetWidth;
-  leftPanel.style.width = `${(leftPanelWidth / containerWidth) * 100}%`;
-  rightPanel.style.width = `${100 - (leftPanelWidth / containerWidth) * 100}%`;
-});
-
-
-
 function resize(event) {
   if (isResizing) {
-    let newWidth = event.clientX / window.innerWidth * 100;
+    let newWidth = event.clientX / window.innerWidth * 100; // Adjust based on clientX
     leftPanel.style.width = `${newWidth}%`;
     rightPanel.style.width = `${100 - newWidth}%`;
+
+    // Update canvas size and camera aspect ratio
+    const rightPanelWidth = rightPanel.offsetWidth;
+    const newHeight = rightPanelWidth / originalAspectRatio; // Maintain the aspect ratio
+
+
+
+
+    if (renderer && camera) {
+      // Update renderer size
+      renderer.setSize(rightPanelWidth, newHeight);
+      // Update camera aspect ratio
+      camera.aspect = rightPanelWidth / newHeight;
+      camera.updateProjectionMatrix();
+    }
+
+    // Ensure the canvas is positioned and sized correctly within the container
+    const canvas = document.querySelector('#threejs-container canvas');
+    if (canvas) {
+      canvas.style.width = `${rightPanelWidth}px`;
+      canvas.style.height = `${newHeight}px`;
+    }
   }
 }
 
@@ -53,10 +62,35 @@ function stopResize() {
   document.removeEventListener('mouseup', stopResize);
 }
 
+window.addEventListener('resize', () => {
+  const rightPanelWidth = rightPanel.offsetWidth;
+  const newHeight = rightPanelWidth / originalAspectRatio; // Maintain the aspect ratio
+  // const newHeight = rightPanelWidth.offsetHeight;
 
+  // Update renderer size and camera aspect ratio
+  if (renderer && camera) {
+    renderer.setSize(rightPanelWidth, newHeight);
+    camera.aspect = rightPanelWidth / newHeight;
+    camera.updateProjectionMatrix();
+  }
+
+  // Ensure the canvas is positioned and sized correctly
+  const canvas = document.querySelector('#threejs-container canvas');
+  if (canvas) {
+    canvas.style.width = `${rightPanelWidth}px`;
+    canvas.style.height = `${newHeight}px`;
+  }
+});
+
+
+
+
+
+
+
+//pdf
 let currentScale = 1.5; // Default zoom level
-let currentPDF = null; // Store the loaded PDF
-
+let currentPDF = null;
 document.getElementById('pdfFile').addEventListener('change', function (event) {
     const file = event.target.files[0];
     if (file) {
@@ -78,8 +112,16 @@ function renderPDF() {
     const container = document.getElementById('pdf-container');
     const buttonsContainer = document.getElementById('pdf-buttons');
 
-    container.innerHTML = ''; // Clear previous content
-    container.appendChild(buttonsContainer); // Re-add buttons
+    if (!container.contains(buttonsContainer)) {
+      container.appendChild(buttonsContainer); // Add only if missing
+  }
+
+  container.querySelectorAll('canvas').forEach(canvas => canvas.remove());
+    // container.innerHTML = ''; // Clear previous content
+    // container.appendChild(buttonsContainer); // Re-add buttons
+
+
+    
 
     for (let i = 1; i <= currentPDF.numPages; i++) {
         currentPDF.getPage(i).then(function (page) {
@@ -95,59 +137,62 @@ function renderPDF() {
                 canvasContext: context,
                 viewport: viewport,
             };
-            page.render(renderContext);
+            
+            //page.render(renderContext);
+
+
+            page.render(renderContext).promise.then(() => {
+              // Apply Invert Filter to Make Text White
+              let imgData = context.getImageData(0, 0, canvas.width, canvas.height);
+              let pixels = imgData.data;
+
+              for (let j = 0; j < pixels.length; j += 4) {
+                  // Invert colors
+                  pixels[j] = 255 - pixels[j];     // Red
+                  pixels[j + 1] = 255 - pixels[j + 1]; // Green
+                  pixels[j + 2] = 255 - pixels[j + 2]; // Blue
+              }
+
+              context.putImageData(imgData, 0, 0);
+            });
+
+
         });
     }
 }
 
-// Handle zooming (CMD + Scroll or Two-Finger Touchpad Gesture)
 document.getElementById('pdf-container').addEventListener('wheel', function (event) {
-    // Only zoom when the CMD key is pressed or when it's a touchpad gesture
-    if (event.ctrlKey || event.metaKey) {
-        event.preventDefault(); // Prevent scrolling behavior
+  if (event.ctrlKey || event.metaKey) {
+      // Handle Zooming (CMD/CTRL + Scroll)
+      event.preventDefault(); // Prevent default scrolling only when zooming
 
-        if (event.deltaY < 0) {
-            // Scroll Up (Zoom In)
-            currentScale += 0.05;
-        } else if (event.deltaY > 0) {
-            // Scroll Down (Zoom Out)
-            if (currentScale > 0.5) { // Prevent zooming out too much
-                currentScale -= 0.05;
-            }
-        }
+      if (event.deltaY < 0) {
+          // Scroll Up (Zoom In)
+          currentScale += 0.05;
+      } else if (event.deltaY > 0) {
+          // Scroll Down (Zoom Out)
+          if (currentScale > 0.5) { // Prevent excessive zooming out
+              currentScale -= 0.05;
+          }
+      }
 
-        renderPDF(); // Re-render PDF with updated scale
-    }
-});
+      renderPDF(); // Re-render PDF with updated scale
+  } 
+  // No need for an "else" here – if CMD/CTRL isn't pressed, normal scrolling happens naturally
+}, { passive: false });
+
+
+
 
 
 
 // LLM
-// LLM
-// LLM
-// LLM
-// LLM
-// LLM
-// LLM
-
-
-
-// Set the worker source
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
   'pdfjs-dist/build/pdf.worker.min.mjs',
   import.meta.url
 ).toString();
 
 let stringifiedData = null;
-
-
-// LLM
-// LLM
-// LLM
-// LLM
-// LLM
-// LLM
-// LLM
 
 async function fetchSummary() {
   const fileInput = document.getElementById('pdfFile');
@@ -196,19 +241,25 @@ async function fetchSummary() {
     reader.readAsArrayBuffer(file);
   });
 }
-
-// Expose the function to global scope
 window.fetchSummary = fetchSummary;
 
 
 
 
 
+
+
+// initialisation helper
 async function initializePage() {
-  const inputData = await fetchSummary();  // Wait for summary data
+  const spinner = document.getElementById("loading-spinner");
+  const threeJSContainer = document.getElementById("threejs-container");
+  spinner.style.display = "block";
+
+  const inputData = await fetchSummary();
 
   if (inputData) {
       console.log("Summary data:", inputData);
+      spinner.style.display = "none";
       let boxDataList = JSON.parse(inputData);
       initializeThreeJS(boxDataList);  // Pass the actual data
 
@@ -217,20 +268,38 @@ async function initializePage() {
       console.log("error initialising three.js")    
     };
   }
-  
 
-function initializeThreeJS(boxDataList){  // Pass the actual data
+
+
+
+
+
+
+  //three.js logic
+function initializeThreeJS(boxDataList){ 
 
   //setup
   const scene = new THREE.Scene();
 
+  const width = container.clientWidth;
+  const height = container.clientHeight;
 
-  const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+  camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
+  originalAspectRatio = width / height; // Save the original aspect ratio
+
+
+
+
+  // camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
   camera.position.z = 25;
-  const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
-  renderer.setSize(window.innerWidth - 18, window.innerHeight - 18);
+  renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+  renderer.setSize(window.innerWidth - 18, window.innerHeight - 18);  
   renderer.setPixelRatio(window.devicePixelRatio);
-  //document.body.appendChild(renderer.domElement);
+  renderer.domElement.style.display = "block";  // Removes unwanted space below canvas
+  renderer.domElement.style.position = "absolute";
+  renderer.domElement.style.top = "50%";
+  renderer.domElement.style.left = "50%";
+  renderer.domElement.style.transform = "translate(-50%, -50%)";
 
   //add buttons again
   document.getElementById('threejs-container').appendChild(renderer.domElement);
@@ -832,7 +901,7 @@ function changeMode() {
 
 
   if (mode === structure) {
-    targetPosition.z += bigCubeSize;
+    targetPosition.z +=  1.5* bigCubeSize;
     rot.set(0, 0, 0); // 90 degrees in radians
 
     let hiddenBoxes = boxes.filter(box => !box.visible);
@@ -849,7 +918,7 @@ function changeMode() {
 
 
   if (mode === relations) {
-    targetPosition.x -= bigCubeSize;
+    targetPosition.x -=  1.5* bigCubeSize;
 
     //rot.set(Math.PI / 2, -Math.PI / 2, Math.PI / 2); // 90 degrees in radians
 
@@ -866,7 +935,7 @@ function changeMode() {
 
   if (mode === themes) {
 
-    targetPosition.z -= bigCubeSize;
+    targetPosition.z -= 1.5* bigCubeSize;
     rot.set(0, - Math.PI, 0);
 
   
@@ -1704,11 +1773,30 @@ function updateBoundingBoxes() {
 
 
 
-  window.addEventListener('resize', function() {
-    renderer.setSize(window.innerWidth - 18, window.innerHeight - 18);
-    camera.aspect = window.innerWidth / window.innerHeight;
+  // window.addEventListener('resize', function() {
+  //   renderer.setSize(window.innerWidth - 18, window.innerHeight - 18);
+  //   camera.aspect = window.innerWidth / window.innerHeight;
+  //   camera.updateProjectionMatrix();
+  // });
+
+
+  window.addEventListener('resize', function () {
+    const container = document.getElementById('threejs-container');
+    
+    // Get the container dimensions
+    const width = container.clientWidth;
+    const height = container.clientHeight;
+
+    console.log("Container dimensions:", width, height);
+
+    // Update the renderer to match the container size
+    renderer.setSize(width, height);
+    
+    // Maintain the correct aspect ratio for the camera
+    camera.aspect = width / height;
     camera.updateProjectionMatrix();
-  });
+});
+
   
 
   function animate() {
@@ -1802,27 +1890,21 @@ setTimeout(() => {
 
 
 
-// click summarization listener
+
+
+
+
+
+// click summary listener
 document.getElementById("summary").addEventListener("click", async function () {
   try {
     console.log("Summarization started...");
-    await initializePage();  // Now it waits for summary before proceeding
+    await initializePage();
     console.log("Summarization complete.");
   } catch (error) {
     console.error("Error summarizing PDF:", error);
   }
 });
-
-
-
-  // Animation loop
-  // window.addEventListener('resize', function () {
-  //   camera.aspect = window.innerWidth / window.innerHeight;
-  //   camera.updateProjectionMatrix();
-  //   renderer.setSize(window.innerWidth, window.innerHeight);
-  // });
-
-
 
 
 

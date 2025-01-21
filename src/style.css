@@ -20,6 +20,11 @@ html, body {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  /* height: 100%;
+  overflow: hidden;
+  display: flex;
+  justify-content: center;
+  align-items: center; */
 }
 
 
@@ -134,20 +139,25 @@ button:focus-visible {
   position: relative
 }
 
-/* #pdf-container {
+#pdf-container {
   position: relative;
   width: 50%;
   overflow: auto;
   background: black;
   padding: 20px;
-} */
+  scrollbar-width: none;
+}
 
+#pdf-container::-webkit-scrollbar {
+  display: none;
+}
 
 
 
 
 #pdf-buttons {
   position: absolute;
+  /* position: sticky; */
   top: 10px; /* Adjust as needed */
   left: 50%;
   transform: translateX(-50%);
@@ -340,4 +350,26 @@ button:focus-visible {
   font-family: 'Courier Prime', monospace;
   text-align: center;
   display: none; /* Initially hidden */
+}
+
+
+
+
+#loading-spinner {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 50px;
+  height: 50px;
+  border: 5px solid #ccc;
+  border-top: 5px solid #000;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  transform: translate(-50%, -50%);
+  display: none;
+}
+
+@keyframes spin {
+  0% { transform: translate(-50%, -50%) rotate(0deg); }
+  100% { transform: translate(-50%, -50%) rotate(360deg); }
 }
