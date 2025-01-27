@@ -17,7 +17,9 @@ app.use(express.json());
 
 // Prompt function
 const prompt = (text) => {
-  return `This is the text: ${text}. I want a summary of the text as an arraylist back in the following form. Do not write any additional text, just give me the arraylist: I want you to extend and enhance this list with contents from the article. Here are the descriptions of the attributes: [entity name; entity description; status or group; references to one or more other entities created that resemble superordinate concepts or entities like a parent-child relationship or a whole-part relationship,where always the bigger or superordinate is represented; a list of tuples that consist of one reference to another created entity and a matching description where dynamics and relationships that are not hierarchical should be described for example the way one entity changes another one ]. Try to be detailled and create rather more than less entries. Here is an example so you have an idea, how the form could look like:
+  return `This is the text: ${text}. I want a summary of the text as an arraylist back in the following form. Do not write any additional text, just give me the arraylist: I want you to extend and enhance this list with contents from the article. Here are the descriptions of the attributes: [entity name; entity description; status or group of the entity; references to one or more other entities created that resemble superordinate concepts or entities like a parent-child relationship or a whole-part relationship,where always the bigger or superordinate is represented; a list of tuples that consist of one reference to another created entity and a matching description where dynamics and relationships that are not hierarchical should be described for example the way one entity changes another one; references to entities that result out of the current entity so that a sequence of events is described].
+  
+  Try to not assign many statuses, but rateher give the same status to several entities. An object can have several parents. An object can reference several sequence objects. Make sure to work out sequences that are not back-referencing but have a clear direction over several entities. Here is an example so you have an idea, how the form could look like:
   "[
       {
           "name": "car",
@@ -30,7 +32,8 @@ const prompt = (text) => {
               ["autonomous_vehicle", "Can function independently without a human driver"],
               ["electric_vehicle", "Powered exclusively by electricity"],
               ["chassis", "Supports the structure and components of the car"]
-          ]
+          ],
+          "sequence": []
       },
       {
           "name": "engine",
@@ -41,7 +44,8 @@ const prompt = (text) => {
               ["internal_combustion_engine", "A subtype commonly used in traditional vehicles"],
               ["electric_motor", "Alternative energy converter in electric vehicles"],
               ["fuel_system", "Delivers fuel to power the engine"]
-          ]
+          ],
+          "sequence": []
       },
             {
           "name": "vehicle_body",
@@ -51,7 +55,8 @@ const prompt = (text) => {
           "relations": [
               ["status_and_style", "A car is seen by many as a status symbol because of its shape"],
               ["fuel_consumption", "The shape of a car influences its fuel consumption"]
-            ]
+            ],
+          "sequence": ["social_implications"]
       },
             {
           "name": "social_implications",
@@ -61,7 +66,8 @@ const prompt = (text) => {
           "relations": [
               ["car", "A car is seen by many as a status symbol because of its shape"],
               ["fuel_consumption", "The shape of a car influences its fuel consumption"]
-            ]
+            ],
+          "sequence": ["status_and_style"]
       },
                   {
           "name": "status_and_style",
@@ -71,7 +77,18 @@ const prompt = (text) => {
           "relations": [
               ["car", "A car is seen by many as a status symbol because of its shape"],
               ["fuel_consumption", "The shape of a car influences its fuel consumption"]
-            ]
+            ],
+          "sequence": ["price"]
+      },
+                 {
+          "name": "innovation",
+          "description": "cars and their parts are constantly innovated and enhanced with new parts and features",
+          "status": "innovation",
+          "parents": ["car"],
+          "relations": [
+              ["internal_combustion_engine", "A result of innovation and development"]
+            ],
+          "sequence": ["internal_combustion_engine", "vehicle_body"]
       },
       {
           "name": "internal_combustion_engine",
@@ -82,10 +99,14 @@ const prompt = (text) => {
               ["car", "Historically the dominant propulsion system for cars"],
               ["hybrid_car", "Used alongside electric motors in hybrid vehicles"],
               ["fuel_system", "Depends on fuel systems to operate"]
-          ]
+          ],
+          "sequence": ["reduced_fuel_consumption"]
       }]"`
 
 };
+
+
+//Try to be detailled and create rather more than less entries
 
 if (!process.env.GITHUB_TOKEN) {
   console.error("The GITHUB_TOKEN environment variable is missing!");

@@ -10,6 +10,8 @@ import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeom
 import OpenAI from "openai";
 import * as pdfjsLib from 'pdfjs-dist';
 import 'pdfjs-dist/build/pdf.worker.min.mjs';
+import { PCA } from 'ml-pca';
+
 
 
 
@@ -324,6 +326,9 @@ function initializeThreeJS(boxDataList){
   let structure = 0;
   let relations = 1;
   let themes = 2;
+  let latent = 3;
+  let sequence = 4;
+
 
   let mode = structure;
   let explore = false;
@@ -401,6 +406,8 @@ function createBox(name, description, status) {
   cube.userData.boundBox = null;
   cube.userData.colour = colour;
   cube.userData.statusline = null;
+  cube.userData.sequence = [];
+
 
   boxes.push(cube);
   return cube;
@@ -410,7 +417,7 @@ function createBox(name, description, status) {
 
 
 // enhanceBox
-function enhanceBox(name, parentes = [], relations = [[]]) {
+function enhanceBox(name, parentes = [], relations = [[]], sequence = []) {
   let cube = boxes.find(box => box === name);
 
   //let cube = boxes.find(box => box.userData.name === name);
@@ -469,20 +476,6 @@ function enhanceBox(name, parentes = [], relations = [[]]) {
     cube.userData.group = parentReferencesString;
 
 
-//z-level
-  // let zLevel = 0;
-  // if (parentReferences && parentReferences.length > 0) {
-  //     // Find the maximum level among all parents
-  //     const maxParentLevel = Math.max(
-  //         ...parentReferences.map(parent => (parent?.userData?.level ?? 0))
-  //     );
-  //     zLevel = maxParentLevel + 25;
-  // }
-  // cube.userData.level = zLevel;
-
-
-
-
 //children
     parentReferences = parentReferences ? (Array.isArray(parentReferences) ? parentReferences : [parentReferences]) : [];
       parentReferences.forEach(parent => {
@@ -512,59 +505,63 @@ function enhanceBox(name, parentes = [], relations = [[]]) {
   }
 
 
+
+
+
+  //sequence
+  sequence = sequence ? (Array.isArray(sequence) ? sequence : [sequence]) : [];
+  sequence.forEach(seq => {
+    cube.userData.sequence = sequence;
+});
+
+
+
   //adding
   scene.add(cube);
   return cube;
     
 }
 
+console.log(boxDataList)
 
-
-// function updateZLevels() {
-//   // Create a map of boxes by their names for easy lookup
-//   const boxMap = new Map(boxes.map(box => [box.userData.name, box]));
-
-//   // Function to recursively update z-levels
-  
-//   function updateLevel(box, level) {
-//     box.userData.level = level;
-//     box.position.z = level;
-    
-//     // Update children
-//     (box.userData.children || []).forEach(childName => {
-//       const childBox = boxMap.get(childName);
-//       if (childBox) {
-//         updateLevel(childBox, level + 25);
-//       }
-//     });
-//   }
-
-//   // Start updating from root boxes (boxes without parents)
-//   boxes.filter(box => box.userData.parents.length === 0).forEach(rootBox => {
-//     updateLevel(rootBox, 0);
-//   });
-// }
 
 
 
 
 function updateZLevels() {
-  function updateLevel(box, level) {
-      box.userData.level = level;
-      box.position.z = level;
+  function updateLevel(box) {
+      if (!box.userData.parents.length) {
+          // Root node, start from level 0
+          box.userData.level = 0;
+      } else {
+          // Find the maximum level of all parents
+          let maxParentLevel = Math.max(...box.userData.parents.map(parent => parent.userData.level));
+          box.userData.level = maxParentLevel + 150; // Place child below lowest-level parent
+      }
       
-      // Ensure children are correctly referenced as objects
-      (box.userData.children || []).forEach(childBox => {
-          updateLevel(childBox, level + 25);
-      });
+      // Update position
+      box.position.z = box.userData.level;
   }
 
-  // Start updating from root boxes (boxes without parents)
-  boxes.filter(box => box.userData.parents.length === 0).forEach(rootBox => {
-      updateLevel(rootBox, 0);
-  });
-}
+  // Process all boxes iteratively (not recursively) to ensure all parents are updated first
+  let remainingBoxes = [...boxes];
 
+  while (remainingBoxes.length > 0) {
+      let updatedBoxes = [];
+
+      remainingBoxes.forEach(box => {
+          let allParentsUpdated = box.userData.parents.every(parent => parent.userData.level !== undefined);
+
+          if (allParentsUpdated) {
+              updateLevel(box);
+              updatedBoxes.push(box);
+          }
+      });
+
+      // Remove processed boxes from the remaining list
+      remainingBoxes = remainingBoxes.filter(box => !updatedBoxes.includes(box));
+  }
+}
 
 
 
@@ -602,6 +599,21 @@ document.getElementById('themes').addEventListener('click', () => {
   themesPos();
   changeMode()
   });
+
+//latent button
+document.getElementById('latent').addEventListener('click', () => {
+  latentPos();
+  mode = latent;
+  changeMode()
+  });
+
+
+  document.getElementById('sequence').addEventListener('click', () => {
+    sequencePos();
+    mode = sequence;
+    changeMode()
+    });
+    
 
 
 
@@ -711,9 +723,9 @@ function onHover(cube) {
   }
   if (mode === themes) {
 
-    boxes.filter(child => child.userData.status === cube.userData.status).forEach(element => {
-      element.material.color.set(black);
-    })
+    // boxes.filter(child => child.userData.status === cube.userData.status).forEach(element => {
+    //   element.material.color.set(black);
+    // })
 
 
     const boundingBox = new THREE.Box3();
@@ -727,19 +739,26 @@ function onHover(cube) {
     const size = new THREE.Vector3();
     boundingBox.getCenter(center);
     boundingBox.getSize(size);
+
+
+    const boxGeometry = new THREE.BoxGeometry(size.x * 1.4, size.y * 1.4, size.z * 1.4);
+    const edges = new THREE.EdgesGeometry(boxGeometry);
+    const lineMaterial = new THREE.LineBasicMaterial({ color: hoverColor, linewidth: 4 });
   
-    const radius = Math.max(size.x, size.y) * 0.6; 
-    const segments = 64; // More segments for smoother circle
-    const circleGeometry = new THREE.CircleGeometry(radius, segments);
+    // const radius = Math.max(size.x, size.y) * 0.6; 
+    // const segments = 64; // More segments for smoother circle
+    // const circleGeometry = new THREE.CircleGeometry(radius, segments);
+
   
-    const circleMaterial = new THREE.MeshBasicMaterial({ 
-      color: hoverColor, 
-      transparent: false,
-      opacity: 1,
-      side: THREE.DoubleSide 
-    });
+    // const circleMaterial = new THREE.MeshBasicMaterial({ 
+    //   color: hoverColor, 
+    //   transparent: false,
+    //   opacity: 1,
+    //   //side: THREE.DoubleSide 
+    // });
+
   
-    const statusOutline = new THREE.Mesh(circleGeometry, circleMaterial);
+    const statusOutline = new THREE.LineSegments(edges, lineMaterial);
     statusOutline.position.copy(center);
   
     // Add the outline to the scene
@@ -762,6 +781,71 @@ function onHover(cube) {
   }
   
   
+  if(mode === sequence) {
+
+    createOutline(cube);
+    cube.material.color.set(black);
+
+    //   function tracePath(cube) {
+    //     let parents = boxes.filter(child => child.userData.sequence.includes(cube));
+
+    //     if (parents.length === 0) {
+    //         return;
+    //     }
+
+    //     parents.forEach(parent => {
+    //         createOutline(parent);
+    //         parent.material.color.set(black);
+    //         createLine(cube, parent);
+
+    //         // Recursively trace the path further
+    //         tracePath(parent);
+    //     });
+    // }
+
+    // tracePath(cube);
+
+
+
+
+
+
+    function tracePath(cube, visited = new Set()) {
+      if (visited.has(cube)) {
+          return; // Stop recursion if this cube was already visited (prevents cycles)
+      }
+  
+      visited.add(cube); // Mark this cube as visited
+  
+      let parents = boxes.filter(child => child.userData.sequence.includes(cube));
+  
+      if (parents.length === 0) {
+          return;
+      }
+  
+      parents.forEach(parent => {
+        createOutline(parent);
+        parent.material.color.set(black);
+        createLine(cube, parent);
+  
+          // Recursively trace the path further
+          tracePath(parent, visited);
+      });
+  }
+
+
+  tracePath(cube);
+
+  
+
+
+
+ }
+
+
+
+
+
   }
 }
 
@@ -830,6 +914,16 @@ function manNavigation() {
     if (mode === themes && !explore) {
       camera.position.z -= event.deltaY * 0.1; 
     }
+
+
+    if (mode === latent && !explore) {
+      camera.position.x += event.deltaY * 0.1; 
+    }
+
+    if (mode === sequence && !explore) {
+      camera.position.y += event.deltaY * 0.1; 
+    }
+
   });
   
   canvas.addEventListener('mousedown', (event) => {
@@ -845,6 +939,18 @@ function manNavigation() {
       prevMousePosition.y = event.clientY;
     }
     if (mode === themes && !explore) {
+      isDragging = true;
+      prevMousePosition.x = event.clientX;
+      prevMousePosition.y = event.clientY;
+    }
+
+    if (mode === latent && !explore) {
+      isDragging = true;
+      prevMousePosition.x = event.clientX;
+      prevMousePosition.y = event.clientY;
+    }
+
+    if (mode === sequence && !explore) {
       isDragging = true;
       prevMousePosition.x = event.clientX;
       prevMousePosition.y = event.clientY;
@@ -891,6 +997,34 @@ function manNavigation() {
       prevMousePosition.x = event.clientX;
       prevMousePosition.y = event.clientY;
     }
+
+    if (mode === latent && !explore && isDragging) {
+      const deltaX = (event.clientX - prevMousePosition.x) * 0.1; // Adjust drag sensitivity
+      const deltaY = (event.clientY - prevMousePosition.y) * 0.1;
+  
+      // Since the plane is rotated, modify the camera's z and y positions
+      camera.position.z += deltaX;
+      camera.position.y += deltaY;
+  
+      // Update previous mouse position
+      prevMousePosition.x = event.clientX;
+      prevMousePosition.y = event.clientY;
+    }
+
+    if (mode === sequence && !explore && isDragging) {
+      const deltaX = (event.clientX - prevMousePosition.x) * 0.1; // Adjust drag sensitivity
+      const deltaY = (event.clientY - prevMousePosition.y) * 0.1;
+  
+      // Since the plane is rotated, modify the camera's z and y positions
+      camera.position.x -= deltaX;
+      camera.position.z -= deltaY;
+  
+      // Update previous mouse position
+      prevMousePosition.x = event.clientX;
+      prevMousePosition.y = event.clientY;
+    }
+
+
   });
   
   canvas.addEventListener('mouseup', () => {
@@ -900,6 +1034,11 @@ function manNavigation() {
 
     if (mode === themes && !explore) isDragging = false;
 
+    if (mode === latent && !explore) isDragging = false;
+
+    if (mode === sequence && !explore) isDragging = false;
+
+
   });
   
   canvas.addEventListener('mouseleave', () => {
@@ -907,8 +1046,12 @@ function manNavigation() {
 
     if (mode === relations && !explore) isDragging = false;
 
-
     if (mode === themes && !explore) isDragging = false;
+
+    if (mode === latent && !explore) isDragging = false;
+
+    if (mode === sequence && !explore) isDragging = false;
+
 
   });
 };
@@ -962,6 +1105,44 @@ function changeMode() {
     manNavigation();
 
   }
+
+  if (mode === latent) {
+
+    targetPosition.x += bigCubeSize;
+    rot.set(0, Math.PI / 2, 0);
+
+    boxes.forEach(box => easeInBoxes(box));
+    boxes.filter(box => box.userData.status === "helperElement" ).forEach(box => box.visible = false); //&& box.userData.group !== "extraElement"
+    manNavigation();
+
+  }
+
+  if (mode === sequence) {
+
+    targetPosition.y += bigCubeSize;
+    rot.set(-Math.PI / 2, 0, 0);
+
+    boxes.forEach(box => box.visible = false);
+
+    boxes.forEach(box => {
+      if(box.userData.sequence.length > 0) {
+        box.visible = true;
+      }
+    })
+
+    boxes.forEach(box => {
+      boxes.forEach(child => {
+        if (child.userData.sequence.includes(box)) {
+          box.visible = true;
+        }
+      });
+    });
+
+    manNavigation();
+
+  }
+
+
 
 
 
@@ -1172,6 +1353,12 @@ function createOutline(cube, color = 0xF7E0C0) {
     } else if (mode === themes) {
       factorX = size.x;
       factorY = size.z;
+    } else if (mode === latent) {
+      factorX = size.z;
+      factorY = size.y;
+    }else if (mode === sequence) {
+      factorX = size.x;
+      factorY = size.z;
     }
 
     // Create a circle geometry (we'll scale it to make an oval)
@@ -1189,13 +1376,13 @@ function createOutline(cube, color = 0xF7E0C0) {
     });
 
     // Create mesh and scale it to form an oval
-    //const outlineMesh = new THREE.Mesh(circleGeometry, outlineMaterial);
+    const outlineMesh = new THREE.Mesh(circleGeometry, outlineMaterial);
     
 
-    const outlineMesh = new THREE.Mesh(boxgeometry, outlineMaterial);
+    // const outlineMesh = new THREE.Mesh(boxgeometry, outlineMaterial);
 
 
-    //outlineMesh.scale.set(factorX / 1.7, factorY / 0.7, 1);
+    outlineMesh.scale.set(factorX / 1.7, factorY / 0.7, 1);
     outlineMesh.position.copy(cube.position);
     scene.add(outlineMesh);
 
@@ -1209,6 +1396,10 @@ function createOutline(cube, color = 0xF7E0C0) {
       outlineMesh.rotation.set(0, -(Math.PI / 2), 0);
     } else if (mode === themes) {
       outlineMesh.rotation.set(0, -Math.PI, 0);
+    } else if (mode === latent) {
+    outlineMesh.rotation.set(0, Math.PI / 2, 0);
+    } else if (mode === sequence) {
+    outlineMesh.rotation.set(Math.PI / 2, 0, 0);
     }
   }
 }
@@ -1280,6 +1471,60 @@ function removeHover(cube) {
     }
   });
 
+
+
+
+  // function removetracePath(cube) {
+  //   let parents = boxes.filter(child => child.userData.sequence.includes(cube));
+
+  //   if (parents.length === 0) {
+  //       return;
+  //   }
+
+  //   parents.forEach(parent => {
+  //     removeOutline(parent);
+  //     parent.material.color.set(parent.userData.colour);
+  //     removeLines(parent);
+
+  //       // Recursively trace the path further
+  //       removetracePath(parent);
+  //   });
+  // }
+
+  // removetracePath(cube);
+
+
+
+  function removetracePath(cube, visited = new Set()) {
+    if (visited.has(cube)) {
+        return; // Stop recursion if this cube was already visited (prevents cycles)
+    }
+
+    visited.add(cube); // Mark this cube as visited
+
+    let parents = boxes.filter(child => child.userData.sequence.includes(cube));
+
+    if (parents.length === 0) {
+        return;
+    }
+
+    parents.forEach(parent => {
+        removeOutline(parent);
+        parent.material.color.set(parent.userData.colour);
+        removeLines(parent);
+
+        // Recursively trace the path further
+        removetracePath(parent, visited);
+    });
+}
+
+removetracePath(cube);
+
+
+
+
+
+
   boxes.filter(child => child.userData.status === cube.userData.status).forEach(element => {
     element.material.color.set(element.userData.colour);
   })
@@ -1318,7 +1563,7 @@ function structurePos() {
       }
     });
 
-    const levelSpacing = 25;   // Distance between levels (y-axis)
+    const levelSpacing = 50;   // Distance between levels (y-axis)
     const groupSpacing = 40;   // Distance between groups (x-axis)
     const boxSpacing = 5;      // Distance between boxes in clusters (x-axis)
     const zFrontFace = bigCubeSize / 2;
@@ -1416,11 +1661,9 @@ function structurePos() {
 }
 
 
-
-
 function structureExplorePos() {
   // setTimeout(() => {
-  const levelSpacing = 25; // Distance between levels on the z-axis
+  const levelSpacing = 50; // Distance between levels on the z-axis
   const groupSpacing = 50; // Distance between groups within a level
   const boxSpacing = 15;    // Distance between boxes within a cluster
 
@@ -1506,6 +1749,11 @@ boxes.forEach(cube => {
 
 
 
+
+
+
+
+
 //relations
 function relationsPos() {
   setTimeout(() => {
@@ -1520,105 +1768,61 @@ function relationsPos() {
     });
 
 
-
-
-    const minDistance = 30;     // Minimum distance between cubes to avoid overlap
-    const maxAttempts = 100;    // Max retries to find a non-overlapping position
-    const relationForce = 50;   // Force to pull related cubes closer
-    const repulsionForce = 10;  // Force to push unrelated cubes apart
-
-    let planeWidth = bigCubeSize;
-    let planeHeight = bigCubeSize;
-    const leftFaceX = -bigCubeSize / 2;
-
-    const placedPositions = [];
-
-    // Helper function to check for collisions
-    function checkCollision(pos) {
-      return placedPositions.some(placedPos => {
-        const dx = pos.y - placedPos.y;
-        const dy = pos.z - placedPos.z;
-        return Math.sqrt(dx * dx + dy * dy) < minDistance;
-      });
-    }
-
-
-    function calculateForces(cube, pos) {
-      let forceY = 0, forceZ = 0;
-      relationBoxes.forEach(otherCube => {
-        if (cube !== otherCube) {
-          const dy = pos.y - otherCube.position.y;
-          const dz = pos.z - otherCube.position.z;
-          const distance = Math.sqrt(dy * dy + dz * dz);
-    
-          if (distance === 0 || isNaN(distance)) {
-            console.error("⚠️ Invalid distance detected!", dy, dz, distance);
-            return { forceY: 1, forceZ: 1 };
-          }
-    
-          const force = cube.userData.relations.includes(otherCube.userData.id) ? relationForce : -repulsionForce;
-          forceY += (dy / distance) * force;
-          forceZ += (dz / distance) * force;
-        }
-      });
-      return { forceY, forceZ };
-    }
-    
+    boxes.forEach(cube => {
+      cube.rotation.set(0, -(Math.PI / 2), 0);
+      cube.userData.boundBox.rotation.set(0, -(Math.PI / 2), 0);
+    });
 
 
 
-    // Position cubes
-    relationBoxes.forEach(cube => {
-      let validPosition = false;
-      let attempts = 0;
-      let pos = { x: leftFaceX, y: 0, z: 0 };
 
-      while (!validPosition && attempts < maxAttempts) {
-        const { forceY, forceZ } = calculateForces(cube, pos);
-        pos.y += forceY * 0.1;
-        pos.z += forceZ * 0.1;
-
-        // Keep within expanded plane
-        pos.y = Math.max(-planeHeight/2, Math.min(planeHeight/2, pos.y));
-        pos.z = Math.max(-planeWidth/2, Math.min(planeWidth/2, pos.z));
-
-        if (!checkCollision(pos)) {
-          validPosition = true;
-        } else {
-          attempts++;
-        }
+    let corpus = boxes.map(box => {
+      let allWords = [];
+      
+      if (box.userData.relations) {
+        box.userData.relations.forEach(([rel, description]) => {
+          allWords = [...allWords, ...description.split(" ")];
+        });
       }
+      return allWords.filter(Boolean); // Remove empty entries
+    });
+    
 
-      if (!validPosition) {
-        // Expand plane if needed
-        planeWidth += 10;
-        planeHeight += 10;
-        pos.y = (Math.random() - 0.5) * planeHeight;
-        pos.z = (Math.random() - 0.5) * planeWidth;
-      }
 
-      placedPositions.push(pos);
+    let pcaPositions = pcaText(corpus);
 
-      gsap.to(cube.position, {
-        duration: 1,
-        x: pos.x,
-        y: pos.y,
-        z: pos.z,
-        ease: "power2.inOut",
-        onUpdate: () => {
-          if (cube.userData.boundBox) {
-            cube.userData.boundBox.position.copy(cube.position);
-          }
+    pcaPositions.forEach(pos => {
+      pos.x = pos.x * 2;
+      pos.y = pos.y * 2;
+    })
+
+    //let adjustedPositions = adjustPos(pcaPositions, "relations");
+
+    let finalPositions = overlapPrevention(pcaPositions);
+
+
+
+    let face = - (bigCubeSize / 2);
+
+    boxes.forEach(cube => {
+      finalPositions.forEach((pos, index) => {
+        if (cube.userData.name === pos.boxName) {
+            gsap.to(cube.position, {
+              duration: 1,
+              x: face,
+              y: pos.y,
+              z: pos.x,
+              ease: "power2.inOut",
+              onUpdate: () => {
+                cube.userData.boundBox.position.copy(cube.position);
+              }
+            });
         }
       });
     });
+
   }, 500);
 }
-
-
-
-
-
 
 
 function relationsExplorePos() {
@@ -1677,10 +1881,6 @@ function relationsExplorePos() {
 function themesPos() {
   setTimeout(() => {
 
-    //let themesBoxes = boxes.filter(box => box.visible === true);
-
-
-
     boxes.forEach(cube => {
       cube.rotation.set(0, -Math.PI, 0);
       cube.userData.boundBox.rotation.set(0, -Math.PI, 0);
@@ -1688,7 +1888,7 @@ function themesPos() {
 
 
     // Base constants
-    const baseClusterSpacing = 30; // Spacing between cluster centers
+    const baseClusterSpacing = 50; // Spacing between cluster centers
     const baseBoxSpread = 10; // Initial spread within clusters
     const minClusterDistance = 10; // Minimum distance between cluster centers
     const faceZ = -bigCubeSize / 2;
@@ -1790,6 +1990,482 @@ function themesPos() {
   }, 500);
 }
 
+
+
+function latentPos() {
+  setTimeout(() => {
+    
+  
+  boxes.forEach(cube => {
+    cube.visible = true
+    cube.rotation.set(0, Math.PI / 2, 0);
+    cube.userData.boundBox.rotation.set(0, Math.PI, 0);
+  });
+
+
+  let corpus = boxes.map(box => {
+    let allWords = [
+      ...box.userData.description.split(" "),];
+    
+    if (box.userData.relations) {
+      box.userData.relations.forEach(([rel, description]) => {
+        allWords = [...allWords, ...description.split(" ")];
+      });
+
+    if (box.userData.status) {
+        allWords = [...allWords, ...box.userData.status.split(" ")];
+      }
+
+    }
+    return allWords.filter(Boolean); // Remove empty entries
+  });
+
+
+
+  let pcaPositions = pcaText(corpus);
+
+  pcaPositions.forEach(pos => {
+    pos.x = pos.x * 1.5;
+    pos.y = pos.y * 1.5;
+  })
+
+  let relPositions = adjustPos(pcaPositions, "relations");
+  let parentsPositions = adjustPos(relPositions, "parents");
+ // let childrenPositions = adjustPos(parentsPositions, "children");
+  let sequencePositions = adjustPos(parentsPositions, "sequence");
+
+
+  let finalPositions = overlapPrevention(sequencePositions);
+
+
+  // let finalPositions = overlapPrevention(parentsPositions);
+
+  console.log(finalPositions);
+
+
+
+  let face = bigCubeSize / 2;
+
+  boxes.forEach(cube => {
+    finalPositions.forEach((pos, index) => {
+      if (cube.userData.name === pos.boxName) {
+          gsap.to(cube.position, {
+            duration: 1,
+            x: face,
+            y: pos.y,
+            z: pos.x,
+            ease: "power2.inOut",
+            onUpdate: () => {
+              cube.userData.boundBox.position.copy(cube.position);
+            }
+          });
+      }
+    });
+  });
+
+
+
+}, 500);
+}
+
+
+
+
+
+
+function sequencePos() {
+
+  setTimeout(() => {
+    // Fix rotations for all boxes
+    boxes.forEach(cube => {
+      cube.rotation.set(-Math.PI / 2, 0, 0);
+      cube.userData.boundBox.rotation.set(-Math.PI / 2, 0, 0);
+    });
+
+    // Find all referenced boxes
+    let referencedBoxes = new Set();
+    boxes.forEach(box => {
+      box.userData.sequence.forEach(seq => referencedBoxes.add(seq));
+    });
+
+    let seqBoxes = boxes.filter(box => box.userData.sequence.length > 0);
+    // Identify start objects (not referenced anywhere)
+    let startObjects = seqBoxes.filter(box => !referencedBoxes.has(box));
+
+    // Positioning parameters
+    let xStart = -bigCubeSize / 2;  // Start X position
+    let yFixed = bigCubeSize / 2;   // Base Y position
+    let zStart = -bigCubeSize / 2;  // Start Z position
+    let xSpacing = 50;  // Horizontal distance
+    let ySpacing = 25;   // Vertical distance for branches
+    let rowSpacing = 50; // Space between independent sequences
+
+    let destinationArray = {}; // Store target positions
+    let placed = new Set();    // Track placed boxes
+    let queue = [];            // Queue for BFS traversal
+
+    // Position start objects in a vertical row
+    startObjects.forEach((box, index) => {
+        let xPos = xStart;
+        let zPos = zStart + index * rowSpacing; // Each sequence starts on a different Z line
+        destinationArray[box.userData.name] = { x: xPos, y: yFixed, z: zPos };
+        placed.add(box);
+        queue.push({ box, x: xPos, y: yFixed, z: zPos }); // Store zPos in queue
+    });
+
+
+
+
+
+    // Position subsequent objects with true alternating branching
+    while (queue.length > 0) {
+        let { box, x, y, z } = queue.shift(); // Get the z position from queue
+        let nextX = x + xSpacing; // Move next boxes to the right
+        let branchCount = box.userData.sequence.length;
+
+        if (branchCount === 1) {
+            // Single continuation follows parent’s z position
+            let nextBox = box.userData.sequence[0];
+            if (!placed.has(nextBox)) {
+                destinationArray[nextBox.userData.name] = { x: nextX, y: y, z: z };
+                placed.add(nextBox);
+                queue.push({ box: nextBox, x: nextX, y: y, z: z });
+            }
+        } else {
+            // Multiple branches: alternate between above and below
+            let yDirection = 1; // Start with up movement
+
+            box.userData.sequence.forEach((nextBox, i) => {
+                if (!placed.has(nextBox)) {
+                    let newY = y + (yDirection * Math.ceil(i / 2) * ySpacing);
+                    yDirection *= -1; // Toggle direction (up/down)
+
+                    // Keep the same z-position as parent
+                    destinationArray[nextBox.userData.name] = { x: nextX, y: newY, z: z };
+                    placed.add(nextBox);
+                    queue.push({ box: nextBox, x: nextX, y: newY, z: z });
+                }
+            });
+        }
+    }
+
+ let face = bigCubeSize / 2;
+
+
+
+
+
+
+
+
+
+    // First pass: Calculate max X positions
+    let maxXPositions = {};
+    boxes.forEach(cube => {
+      let pos = destinationArray[cube.userData.name];
+      if (pos) {
+        let refArray = boxes.filter(c => c.userData.sequence.includes(cube))
+                            .map(c => destinationArray[c.userData.name]);
+        
+        let maxX = Math.max(-1000, ...refArray.map(posRef => posRef ? posRef.x : 0));
+        maxXPositions[cube.userData.name] = maxX + xSpacing;
+
+        console.log(cube.userData.name, maxXPositions[cube.userData.name])
+
+      }
+    });
+
+
+    boxes.forEach(cube => {
+      let pos = destinationArray[cube.userData.name];
+      
+      if (pos) {
+        if (pos.x > 0){
+        pos.x = maxXPositions[cube.userData.name];
+        }
+
+
+        gsap.to(cube.position, {
+          duration: 1,
+          x: pos.x,
+          y: face, // Adjust for scene positioning
+          z: pos.z + pos.y,
+          ease: "power2.inOut",
+          onUpdate: () => {
+            cube.userData.boundBox.position.copy(cube.position);
+          }
+        });
+      }
+    });
+
+
+
+  }, 500);
+}
+
+
+
+
+
+
+
+
+
+
+
+//pca computation
+
+function computeTF(doc) {
+  const tf = {};
+  const docLength = doc.length;
+  doc.forEach(word => {
+      tf[word] = (tf[word] || 0) + 1;
+  });
+
+  for (let word in tf) {
+      tf[word] /= docLength;
+  }
+
+  return tf;
+}
+
+function computeIDF(corpus) {
+  const idf = {};
+  const docCount = corpus.length;
+
+  corpus.forEach(doc => {
+      const uniqueWords = new Set(doc);
+      uniqueWords.forEach(word => {
+          idf[word] = (idf[word] || 0) + 1;
+      });
+  });
+
+  for (let word in idf) {
+      idf[word] = Math.log(docCount / idf[word]);
+  }
+
+  return idf;
+}
+
+function computeTFIDF(corpus) {
+  const idf = computeIDF(corpus);
+  return corpus.map(doc => {
+      const tf = computeTF(doc);
+      const tfidf = {};
+
+      for (let word in tf) {
+          tfidf[word] = tf[word] * idf[word] || 0;
+      }
+
+      return tfidf;
+  });
+}
+
+// pca for text
+function pcaText(corpus) {
+  const tfidfVectors = computeTFIDF(corpus);
+  const maxLength = Math.max(...tfidfVectors.map(doc => Object.keys(doc).length));
+
+  let vectors = tfidfVectors.map(doc => {
+    const vector = Object.values(doc);
+    while (vector.length < maxLength) {
+      vector.push(0);
+    }
+    return vector;
+  });
+
+  const pca = new PCA(vectors);
+  const reducedVectors = pca.predict(vectors);
+
+  const minX = Math.min(...reducedVectors.data.map(v => v[0]));
+  const maxX = Math.max(...reducedVectors.data.map(v => v[0]));
+  const minY = Math.min(...reducedVectors.data.map(v => v[1]));
+  const maxY = Math.max(...reducedVectors.data.map(v => v[1]));
+
+  let positions = reducedVectors.data.map((v, index) => ({
+    boxName: boxes[index].userData.name,
+    x: normalize(v[0], minX, maxX, -bigCubeSize / 2, bigCubeSize / 2),
+    y: normalize(v[1], minY, maxY, -bigCubeSize / 2, bigCubeSize / 2),
+    z: 0 // 2D projection, so z is 0
+  }));
+
+  return positions;
+}
+
+
+//adjustments
+function adjustPos(initialPositions, reference, iterations = 50, attractionStrength = 0.2) {
+  
+  let positions = initialPositions.map(pos => ({ ...pos })); // Deep copy
+
+  for (let i = 0; i < iterations; i++) {
+      let totalMovement = 0;
+
+      positions.forEach((pos, index) => {
+          let box = boxes.find(b => b.userData.name === pos.boxName);
+          if (!box || !box.userData.relations) return;
+
+          let forceX = 0, forceY = 0;
+
+
+      if (reference === "parents") {
+        box.userData.parents.forEach((parent) => {
+          let relatedPos = positions.find(p => p.boxName === parent.userData.name);
+          if (relatedPos) {
+              let dx = relatedPos.x - pos.x;
+              let dy = relatedPos.y - pos.y;
+              let distance = Math.sqrt(dx * dx + dy * dy);
+              
+              // Apply attraction force
+              forceX += (dx / distance) * attractionStrength;
+              forceY += (dy / distance) * attractionStrength;
+          }
+      });
+      }else if (reference === "relations") {
+
+
+          // Attraction forces
+          box.userData.relations.forEach(([relatedItem, _]) => {
+              let relatedPos = positions.find(p => p.boxName === relatedItem.userData.name);
+              if (relatedPos) {
+                  let dx = relatedPos.x - pos.x;
+                  let dy = relatedPos.y - pos.y;
+                  let distance = Math.sqrt(dx * dx + dy * dy);
+                  
+                  // Apply attraction force
+                  forceX += (dx / distance) * attractionStrength;
+                  forceY += (dy / distance) * attractionStrength;
+              }
+          });
+
+        }else if (reference === "children") {
+          box.userData.children.forEach((parent) => {
+            let relatedPos = positions.find(p => p.boxName === parent.userData.name);
+            if (relatedPos) {
+                let dx = relatedPos.x - pos.x;
+                let dy = relatedPos.y - pos.y;
+                let distance = Math.sqrt(dx * dx + dy * dy);
+                
+                // Apply attraction force
+                forceX += (dx / distance) * attractionStrength;
+                forceY += (dy / distance) * attractionStrength;
+            }
+        });
+      }else if (reference === "sequence") {
+        box.userData.sequence.forEach((parent) => {
+          let relatedPos = positions.find(p => p.boxName === parent.userData.name);
+          if (relatedPos) {
+              let dx = relatedPos.x - pos.x;
+              let dy = relatedPos.y - pos.y;
+              let distance = Math.sqrt(dx * dx + dy * dy);
+              
+              // Apply attraction force
+              forceX += (dx / distance) * attractionStrength;
+              forceY += (dy / distance) * attractionStrength;
+          }
+      });
+    }
+  
+
+          // Update position
+          pos.x += forceX;
+          pos.y += forceY;
+          totalMovement += Math.abs(forceX) + Math.abs(forceY);
+      });
+
+      if (totalMovement < 0.001) break; // Stop if movement is very small
+  }
+
+  return positions;
+}
+
+
+//overlapping
+function overlapPrevention(initialPositions, iterations = 100, repulsionStrength = 0.9, minDistance = 30) {
+  let finalPositions = initialPositions.map(pos => ({ ...pos })); // Deep copy
+  
+  // Calculate the bounding box sizes for all boxes once, outside the loop
+  const boxSizes = finalPositions.map(pos => {
+    let box = boxes.find(b => b.userData.name === pos.boxName);
+    if (box && box.userData.boundBox) {
+      const textBoundingBox = new THREE.Box3().setFromObject(box);
+      const size = new THREE.Vector3();
+      textBoundingBox.getSize(size);  // Get the size of the bounding box
+      return size;  // Return the bounding box size
+    }
+    return null; // Handle the case where no box is found
+  });
+
+  // Loop through iterations to apply repulsion forces
+  for (let i = 0; i < iterations; i++) {
+    let totalMovement = 0;
+
+    finalPositions.forEach((pos, index) => {
+      let box = boxes.find(b => b.userData.name === pos.boxName);
+      if (!box || !box.userData.boundBox) return;
+
+      let forceX = 0, forceY = 0;
+
+      finalPositions.forEach((otherPos, otherIndex) => {
+        if (index !== otherIndex) {
+          // Get the box size for the other position
+          const otherBoxSize = boxSizes[otherIndex];
+          if (!otherBoxSize) return; // Skip if no valid box size
+
+          let dx = otherPos.x - pos.x;
+          let dy = otherPos.y - pos.y;
+
+          // Calculate the actual distance between boxes
+          const distance = Math.sqrt(dx * dx + dy * dy);
+
+          // Calculate the threshold based on the bounding box sizes in both x and y directions
+          const thresholdX = (boxSizes[index].x + otherBoxSize.x) / 2; // Average width of both boxes
+          const thresholdY = (boxSizes[index].y + otherBoxSize.y) / 2; // Average height of both boxes
+
+          // If the distance in either x or y direction is smaller than the threshold, apply repulsion
+          if (Math.abs(dx) < thresholdX || Math.abs(dy) < thresholdY) {
+            // Calculate repulsion force proportionally based on the distance
+            let repulsionForceX = repulsionStrength * (thresholdX - Math.abs(dx)) / (Math.abs(dx) + 0.001); // Prevent division by zero
+            let repulsionForceY = repulsionStrength * (thresholdY - Math.abs(dy)) / (Math.abs(dy) + 0.001); // Prevent division by zero
+
+            // Apply the forces
+            forceX += repulsionForceX * (dx / Math.abs(dx)); // Apply force in the direction of dx
+            forceY += repulsionForceY * (dy / Math.abs(dy)); // Apply force in the direction of dy
+          }
+        }
+      });
+
+      // Update position
+      pos.x += forceX;
+      pos.y += forceY;
+
+      // Calculate total movement for breaking the loop if movement is small
+      totalMovement += Math.abs(forceX) + Math.abs(forceY);
+    });
+
+    // Stop if movement is very small (to prevent redundant iterations)
+    if (totalMovement < 0.001) break;
+  }
+
+  return finalPositions;
+}
+
+function normalize(value, min, max, rangeMin, rangeMax) {
+  if (max - min === 0) return (rangeMin + rangeMax) / 2; // Avoid division by zero
+  return rangeMin + ((value - min) / (max - min)) * (rangeMax - rangeMin);
+}
+
+
+
+
+
+
+
+
+
+
+
+
 function updateBoundingBoxes() {
   const statusClusters = {};
   boxes.forEach(cube => {
@@ -1829,13 +2505,6 @@ function updateBoundingBoxes() {
 
 
 
-  // window.addEventListener('resize', function() {
-  //   renderer.setSize(window.innerWidth - 18, window.innerHeight - 18);
-  //   camera.aspect = window.innerWidth / window.innerHeight;
-  //   camera.updateProjectionMatrix();
-  // });
-
-
   window.addEventListener('resize', function () {
     const container = document.getElementById('threejs-container');
     
@@ -1871,63 +2540,16 @@ function updateBoundingBoxes() {
 //initialising and handling
 
 // Function to prepare box data
-function prepareBoxData(name, description, status, parents = [], relations = []) {
+function prepareBoxData(name, description, status, parents = [], relations = [], sequence = []) {
   return {
       name: String(name),
       description: String(description),
       status: String(status),
       parents: Array.isArray(parents) ? parents : [parents].filter(Boolean),
-      relations: Array.isArray(relations) ? relations.filter(r => Array.isArray(r) && r.length === 2) : []
+      relations: Array.isArray(relations) ? relations.filter(r => Array.isArray(r) && r.length === 2) : [],
+      sequence: Array.isArray(sequence) ? sequence : [sequence].filter(Boolean),
   };
 }
-
-// Function to process all boxes
-// function processAllBoxes(boxesData) {
-//   const createdBoxes = new Map();
-
-//   // Phase 1: Create all boxes
-//   boxesData.forEach(data => {
-//       const box = createBox(data.name, data.description, data.status);
-//       createdBoxes.set(data.name, box);
-//   });
-
-//   // Phase 2: Enhance all boxes
-//   boxesData.forEach(data => {
-//       const box = createdBoxes.get(data.name);
-      
-//           data.parents.forEach(parentName => {
-//             if(!createdBoxes.has(parentName)){
-//               boxesData.push(prepareBoxData(parentName,null, null, null,null));
-//               let createdNew = createBox(parentName,"superordinate element","superordinate element");
-//               createdBoxes.set(parentName, createdNew);
-//               enhanceBox(createdNew, [], []);
-//               //enhanceBox(parentName, [], []);
-//             }
-//           })
-
-//           data.relations.forEach(([relation, description]) => {
-//             if(!createdBoxes.has(relation)){
-//               boxesData.push(prepareBoxData(relation,null, null, null,null));
-//               let createdNew = createBox(relation,"related element","related element");
-//               createdBoxes.set(relation, createdNew);
-//               enhanceBox(createdNew, [], []);
-//               //enhanceBox(relation, [], []);
-//             }
-//           })
-
-//       const parentBoxes = data.parents.map(parentName => createdBoxes.get(parentName)).filter(Boolean);
-//       const processedRelations = data.relations.map(([relatedName, description]) => 
-//           [createdBoxes.get(relatedName), description]).filter(([box]) => box);
-      
-//       enhanceBox(box, parentBoxes, processedRelations);
-//   });
-
-//   // Update z-levels after all enhancements
-//   updateZLevels();
-
-//   return Array.from(createdBoxes.values());
-// }
-
 
 
 
@@ -1945,13 +2567,39 @@ function processAllBoxes(boxesData) {
       data.parents.forEach(parentName => {
           if (!createdBoxes.has(parentName)) {
               // Add missing parent box before processing children
-              boxesData.push(prepareBoxData(parentName, null, null, null, null));
+              boxesData.push(prepareBoxData(parentName, null, null, null, null, null));
               let createdNew = createBox(parentName, "superordinate element", "superordinate element");
               createdBoxes.set(parentName, createdNew);
-              enhanceBox(createdNew, [], []); // Parents should be enhanced first
+              enhanceBox(createdNew, [], [], []); // Parents should be enhanced first
           }
       });
   });
+
+  boxesData.forEach(data => {
+    data.relations.forEach(([relation, description]) => {
+        if (!createdBoxes.has(relation)) {
+            // Add missing parent box before processing children
+            boxesData.push(prepareBoxData(relation, null, null, null, null, null));
+            let createdNewR = createBox(relation, "superordinate element", "superordinate element");
+            createdBoxes.set(relation, createdNewR);
+            enhanceBox(createdNewR, [], [], []); // Parents should be enhanced first
+        }
+    });
+});
+
+
+boxesData.forEach(data => {
+  data.sequence.forEach(seq => {
+      if (!createdBoxes.has(seq)) {
+          // Add missing parent box before processing children
+          boxesData.push(prepareBoxData(seq, null, null, null, null, null));
+          let createdNewS = createBox(seq, "superordinate element", "superordinate element");
+          createdBoxes.set(seq, createdNewS);
+          enhanceBox(createdNewS, [], [], []); // Parents should be enhanced first
+      }
+  });
+});
+
 
   // Phase 3: Enhance all boxes after ensuring parents exist
   boxesData.forEach(data => {
@@ -1960,8 +2608,10 @@ function processAllBoxes(boxesData) {
       const parentBoxes = data.parents.map(parentName => createdBoxes.get(parentName)).filter(Boolean);
       const processedRelations = data.relations.map(([relatedName, description]) => 
           [createdBoxes.get(relatedName), description]).filter(([box]) => box);
+      const sequenceBoxes = data.sequence.map(sequenceName => createdBoxes.get(sequenceName)).filter(Boolean);
 
-      enhanceBox(box, parentBoxes, processedRelations);
+
+      enhanceBox(box, parentBoxes, processedRelations, sequenceBoxes);
   });
 
   // Step 4: **Now update levels after all boxes exist**
@@ -1977,7 +2627,7 @@ function processAllBoxes(boxesData) {
 //populate
 const boxesData = [];
 boxDataList.forEach(data => {
-  boxesData.push(prepareBoxData(data.name, data.description, data.status, data.parents, data.relations));
+  boxesData.push(prepareBoxData(data.name, data.description, data.status, data.parents, data.relations, data.sequence));
 });
 processAllBoxes(boxesData);
 setTimeout(() => {
